@@ -6,7 +6,7 @@ include ../Makefile.inc
 
 mpiperf := mpiperf
 mpiperf_objs := mpiperf.o util.o mempool.o stat.o report.o timeslot.o \
-                mpigclock.o hpctimer.o logger.o \
+                mpigclock.o hpctimer.o logger.o memcontrol.o hashtab.o \
                 bench_coll.o \
                 coll/allgather.o \
                 coll/allgatherv.o \

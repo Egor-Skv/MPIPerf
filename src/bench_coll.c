@@ -21,6 +21,7 @@
 #include "util.h"
 #include "hpctimer.h"
 #include "bench_coll_tab.h"
+#include "memcontrol.h"
 
 #define TEST_SLOTLEN_SCALE 1.1
 
@@ -44,19 +45,26 @@ int run_collbench(collbench_t *bench)
     {
         params.comm = createcomm(MPI_COMM_WORLD, params.nprocs);
 
-        /* For each data size (count) */
-        for (params.count = mpiperf_count_min;
-             params.count <= mpiperf_count_max; )
-        {
-            /* Test collective operation for given nprocs and count */
-            run_collbench_test(bench, &params);
+        if (mpiperf_mem_meas) {
+        	params.count = mpiperf_count_min;
+        	run_collbench_test(bench, &params);
+        }
+        else {
+            /* For each data size (count) */
+            for (params.count = mpiperf_count_min;
+                 params.count <= mpiperf_count_max; )
+            {
+                /* Test collective operation for given nprocs and count */
+                run_collbench_test(bench, &params);
 
-            if (mpiperf_count_step_type == STEP_TYPE_MUL) {
-                params.count *= mpiperf_count_step;
-            } else {
-                params.count += mpiperf_count_step;
+                if (mpiperf_count_step_type == STEP_TYPE_MUL) {
+                    params.count *= mpiperf_count_step;
+                } else {
+                    params.count += mpiperf_count_step;
+                }
             }
         }
+
         if (params.comm != MPI_COMM_NULL)
             MPI_Comm_free(&params.comm);
 
@@ -77,6 +85,27 @@ int run_collbench(collbench_t *bench)
 }
 
 /*
+ * run_collbench_memtest: Simple mem usage test
+ *
+ */
+int run_collbench_memtest(collbench_t *bench, colltest_params_t *params)
+{
+	double time; //I just don't want to get segfault
+
+	if (bench->init)
+	        bench->init(params);
+
+	init_memory_hook();
+
+	bench->collop(params, &time);
+
+    deinit_memory_hook();
+
+    if (bench->free)
+            bench->free();
+}
+
+/*
  * run_collbench_test: Measures execution time of the collective
  *                     for given parameters (data size, nprocs).
  */
@@ -91,11 +120,17 @@ int run_collbench_test(collbench_t *bench, colltest_params_t *params)
                params->nprocs, params->count);
 
     if (params->comm != MPI_COMM_NULL) {
+
         /* This process participates in measures */
         if (mpiperf_perprocreport)
             procstat = stat_sample_create();
 
-        if (mpiperf_synctype == SYNC_TIME) {
+        if(mpiperf_mem_meas)
+        {
+        	run_collbench_memtest(bench, params);
+            report_mem_usage_results(bench, params);
+
+        } else if (mpiperf_synctype == SYNC_TIME) {
             run_collbench_test_synctime(bench, params, &exectime, &nruns,
                                         &ncorrectruns, procstat);
             report_write_colltest_synctime(bench, params, exectime, nruns,

@@ -101,6 +101,8 @@ extern int mpiperf_nruns_max;
 extern char *mpiperf_logfile;
 extern int mpiperf_logmaster_only;
 
+extern int mpiperf_mem_meas;
+
 extern int mpiperf_confidence_level_type;
 extern int mpiperf_confidence_level;
 

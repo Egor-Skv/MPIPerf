@@ -68,6 +68,8 @@ int mpiperf_nruns_max;
 char *mpiperf_logfile;
 int mpiperf_logmaster_only;
 
+int mpiperf_mem_meas;
+
 int mpiperf_confidence_level_type;
 int mpiperf_confidence_level;
 
@@ -239,6 +241,7 @@ static void print_usage(int argc, char **argv)
     fprintf(stderr, "  -j               Run sanity check of timer\n");
     fprintf(stderr, "  -l <file>        Log filename\n");
     fprintf(stderr, "  -m               Log by master process only (default: off)\n");
+    fprintf(stderr, "  -M               Measure memory usage (Extra new feature!!!)\n");
     fprintf(stderr, "  -q               Display information about all benchmarks\n");
     fprintf(stderr, "  -h               Display this information\n");
     fprintf(stderr, "  -v               Display the version number\n");
@@ -250,7 +253,7 @@ static int parse_options(int argc, char **argv)
 {
     int opt;
 
-    while ( (opt = getopt(argc, argv, "p:P:x:X:g:G:s:S:e:E:r:R:l:z:w:t:o:c:badTjmqh")) != -1) {
+    while ( (opt = getopt(argc, argv, "p:P:x:X:g:G:s:S:e:E:r:R:l:z:w:t:o:c:badTjmqhM")) != -1) {
         switch (opt) {
         case 'p':
             mpiperf_nprocs_min = atoi(optarg);
@@ -362,6 +365,9 @@ static int parse_options(int argc, char **argv)
             break;
         case 'm':
             mpiperf_logmaster_only = 1;
+            break;
+        case 'M':
+            mpiperf_mem_meas = 1;
             break;
         case 'q':
             if (IS_MASTER_RANK) {
