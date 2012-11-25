@@ -102,6 +102,7 @@ void free_all_counters(void)
 void print_memtest_header(char *benchname) {
 	printf("# Characteristics of measurements:\n");
 	printf("# Procs - total number of processes\n");
+	printf("# Rank - Rank (number) of this processes\n");
 	printf("# Malloc called - malloc called\n");
 	printf("# Realloc called - realloc called\n");
 	printf("# Free called - free called\n");
@@ -112,20 +113,21 @@ void print_memtest_header(char *benchname) {
 	printf("# Freed  - Total bytes freed\n");
 	printf("# Benchmark: %s\n", benchname);
 
-	printf("# [Procs]    [Malloc called]    [Realloc called]    [Free called]    [Unknown free]    [Unknown realloc]    [Allocated]    [Freed]\n");
+	printf("# [Procs]  [Rank]    [Malloc called]    [Realloc called]    [Free called]    [Unknown free]    [Unknown realloc]    [Allocated]    [Freed]\n");
 }
 
 void report_mem_usage_results(int nprocs)
 {
 
-	if (IS_MASTER_RANK) { //Maybe we need to print this data for each process??
+	if (!mpiperf_logmaster_only || IS_MASTER_RANK) {
 
-		printf("   %-7d    %-7d            %-7d             %-7d          %-7d           %-7d              %-7d        %-7d\n",
-				nprocs, malloc_call_cnt, realloc_call_cnt, free_call_cnt,
+		printf("   %-7d  %-7d   %-7d            %-7d             %-7d          %-7d           %-7d              %-7d        %-7d\n",
+				nprocs, mpiperf_rank, malloc_call_cnt, realloc_call_cnt, free_call_cnt,
 				ufree_call_cnt,	urealloc_call_cnt, bytes_allocated, bytes_freed);
 	}
 
 	free_all_counters();
+
 }
 
 
@@ -171,14 +173,14 @@ static void *my_realloc_hook(void *ptr, size_t size, const void *caller)
     hash_data = memht_search(test_ht, &ptr);
 
     if(hash_data) {
-    	freed += *((int*)hash_data);
+    	freed = *((int*)hash_data);
     	memht_remove(test_ht, &ptr);
-
         memht_insert(test_ht, &result, &size);
 
         realloc_call_cnt++;
-        if((alloc-freed) > 0)
+        if((alloc-freed) > 0){
         	bytes_allocated += alloc - freed;
+        }
         else
         	bytes_freed += freed - alloc;
     }
@@ -187,9 +189,6 @@ static void *my_realloc_hook(void *ptr, size_t size, const void *caller)
     	//Realloc called on unknown pointer
     	urealloc_call_cnt++;
     }
-
-
-
 
     /* Restore our own hooks */
     set_my_hooks();
