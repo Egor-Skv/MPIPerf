@@ -22,6 +22,8 @@
 #include "hpctimer.h"
 #include "bench_pt2pt_tab.h"
 
+#include "memcontrol.h"
+
 #define TEST_SLOTLEN_SCALE 1.1
 
 /*
@@ -75,6 +77,32 @@ int run_pt2ptbench(pt2ptbench_t *bench)
 }
 
 /*
+ * run_pt2ptbench_memtest: Simple mem usage test
+ *
+ */
+void run_pt2ptbench_memtest(pt2ptbench_t *bench, pt2pttest_params_t *params)
+{
+	double *stage_exectime = NULL; //I just don't want to get segfault
+	stage_exectime = xrealloc(stage_exectime, sizeof(*stage_exectime));
+
+	if (bench->init)
+	        bench->init(params);
+
+	init_memory_hook();
+
+	bench->op(params, stage_exectime);
+
+    deinit_memory_hook();
+
+    if (bench->free)
+            bench->free();
+
+    free(stage_exectime);
+
+}
+
+
+/*
  * run_pt2ptbench_test: Measures execution time of the point-to-point operation
  *                      for given parameters (data size, nprocs).
  */
@@ -88,12 +116,19 @@ int run_pt2ptbench_test(pt2ptbench_t *bench, pt2pttest_params_t *params)
                params->nprocs, params->count);
 
     if (params->comm != MPI_COMM_NULL) {
-        /* This process participates in measures */
-        run_pt2ptbench_test_synctime(bench, params, &exectime, &nruns,
-                                     &ncorrectruns);
-        report_write_pt2pttest_synctime(bench, params, exectime, nruns,
-                                        ncorrectruns);
-        free(exectime);
+
+        if(mpiperf_mem_meas) {
+        	run_pt2ptbench_memtest(bench, params);
+            report_mem_usage_results(params->nprocs);
+        }
+        else {
+            /* This process participates in measures */
+            run_pt2ptbench_test_synctime(bench, params, &exectime, &nruns,
+                                         &ncorrectruns);
+            report_write_pt2pttest_synctime(bench, params, exectime, nruns,
+                                            ncorrectruns);
+            free(exectime);
+        }
     }
     return MPIPERF_SUCCESS;
 }
@@ -276,34 +311,39 @@ pt2ptbench_t *lookup_pt2ptbench(const char *name)
 int report_write_pt2ptbench_header(pt2ptbench_t *bench)
 {
     if (IS_MASTER_RANK) {
-        printf("# Characteristics of measurements:\n");
-        printf("#   Procs - total number of processes\n");
-        printf("#   Count - count of elements in send/recv buffer\n");
-        printf("#   TRuns - total number of measurements (valid and invalid measurements)\n");
-        printf("#   CRuns - number of correct measurements (only valid)\n");
-        printf("#   FRuns - number of correct measurements after statistical analysis (removing of outliers)\n");
-        printf("#   Mean - arithmetic mean of execution time (based on FRuns)\n");
-        printf("#   RSE - relative standard error (StdErr / Mean)\n");
-        printf("#   StdErr - standard error of the mean: StdDev / sqrt(FRuns)\n");
-        printf("#   Min - minimal value\n");
-        printf("#   Max - miximal value\n");
-        printf("#   CL - confidence level: 90%%, 95%% or 99%%\n");
-        printf("#   Err - error of measurements: t_student * StdErr\n");
-        printf("#   CI LB - lower bound of confidence interval: Mean - Err\n");
-        printf("#   CI UB - upper bound of confidence interval: Mean + Err\n");
-        printf("#   RelErr - relative error of measurements: Err / Mean\n");
-        printf("#\n");
-        printf("# ------------------------------------------------------------------\n");
-        printf("# %s time (time of the master process)\n", bench->name);
-        printf("# Confidence level (CL): %d%%\n", mpiperf_confidence_level);
-        printf("# ------------------------------------------------------------------\n");
-        if (mpiperf_timescale == TIMESCALE_SEC) {
-            printf("# [Procs] [Count]     [TRuns] [CRuns] [FRuns] [Mean]       [RSE]      [StdErr]     [Min]        [Max]        [Err]        [CI LB]      [CI UB]      [RelErr]\n");
-        } else {
-            /* usec */
-            printf("# [Procs] [Count]     [TRuns] [CRuns] [FRuns] [Mean]         [RSE]      [StdErr]       [Min]          [Max]          [Err]          [CI LB]        [CI UB]        [RelErr]\n");
-        }
-        printf("#\n");
+    	if(mpiperf_mem_meas) {
+    		print_memtest_header(bench->name);
+    	}
+    	else {
+            printf("# Characteristics of measurements:\n");
+            printf("#   Procs - total number of processes\n");
+            printf("#   Count - count of elements in send/recv buffer\n");
+            printf("#   TRuns - total number of measurements (valid and invalid measurements)\n");
+            printf("#   CRuns - number of correct measurements (only valid)\n");
+            printf("#   FRuns - number of correct measurements after statistical analysis (removing of outliers)\n");
+            printf("#   Mean - arithmetic mean of execution time (based on FRuns)\n");
+            printf("#   RSE - relative standard error (StdErr / Mean)\n");
+            printf("#   StdErr - standard error of the mean: StdDev / sqrt(FRuns)\n");
+            printf("#   Min - minimal value\n");
+            printf("#   Max - miximal value\n");
+            printf("#   CL - confidence level: 90%%, 95%% or 99%%\n");
+            printf("#   Err - error of measurements: t_student * StdErr\n");
+            printf("#   CI LB - lower bound of confidence interval: Mean - Err\n");
+            printf("#   CI UB - upper bound of confidence interval: Mean + Err\n");
+            printf("#   RelErr - relative error of measurements: Err / Mean\n");
+            printf("#\n");
+            printf("# ------------------------------------------------------------------\n");
+            printf("# %s time (time of the master process)\n", bench->name);
+            printf("# Confidence level (CL): %d%%\n", mpiperf_confidence_level);
+            printf("# ------------------------------------------------------------------\n");
+            if (mpiperf_timescale == TIMESCALE_SEC) {
+                printf("# [Procs] [Count]     [TRuns] [CRuns] [FRuns] [Mean]       [RSE]      [StdErr]     [Min]        [Max]        [Err]        [CI LB]      [CI UB]      [RelErr]\n");
+            } else {
+                /* usec */
+                printf("# [Procs] [Count]     [TRuns] [CRuns] [FRuns] [Mean]         [RSE]      [StdErr]       [Min]          [Max]          [Err]          [CI LB]        [CI UB]        [RelErr]\n");
+            }
+            printf("#\n");
+    	}
     }
     return MPIPERF_SUCCESS;
 }

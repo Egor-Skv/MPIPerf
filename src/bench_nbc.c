@@ -22,6 +22,8 @@
 #include "hpctimer.h"
 #include "bench_nbc_tab.h"
 
+#include "memcontrol.h"
+
 #define TEST_SLOTLEN_SCALE 1.1
 
 #define BLOCKINGTIME_RSE_MAX 0.05
@@ -60,20 +62,28 @@ int run_nbcbench(nbcbench_t *bench)
     {
         params.comm = createcomm(MPI_COMM_WORLD, params.nprocs);
 
-        /* For each data size (count) */
-        for (params.count = mpiperf_count_min;
-             params.count <= mpiperf_count_max; )
-        {
-            /* Test NBC collective operation for given nprocs and count */
-            if (mpiperf_nbcbench_mode == NBCBENCH_OVERLAP)
-                run_nbcbench_overlap(bench, &params);
-            else
-                run_nbcbench_blocking(bench, &params);
 
-            if (mpiperf_count_step_type == STEP_TYPE_MUL) {
-                params.count *= mpiperf_count_step;
-            } else {
-                params.count += mpiperf_count_step;
+        if (mpiperf_mem_meas) {
+        	/* For each data size (count) */
+        	params.count = mpiperf_count_min;
+        	run_nbcbench_blocking(bench, &params);
+        }
+        else {
+            /* For each data size (count) */
+            for (params.count = mpiperf_count_min;
+                 params.count <= mpiperf_count_max; )
+            {
+                /* Test NBC collective operation for given nprocs and count */
+                if (mpiperf_nbcbench_mode == NBCBENCH_OVERLAP)
+                    run_nbcbench_overlap(bench, &params);
+                else
+                    run_nbcbench_blocking(bench, &params);
+
+                if (mpiperf_count_step_type == STEP_TYPE_MUL) {
+                    params.count *= mpiperf_count_step;
+                } else {
+                    params.count += mpiperf_count_step;
+                }
             }
         }
         if (params.comm != MPI_COMM_NULL)
@@ -550,8 +560,10 @@ int report_write_nbcbench_header(nbcbench_t *bench)
         return MPIPERF_SUCCESS;
 
     printf("# Characteristics of measurements:\n");
-
-    if (mpiperf_nbcbench_mode == NBCBENCH_OVERLAP) {
+	if(mpiperf_mem_meas) {
+		print_memtest_header(bench->name);
+	}
+	else if (mpiperf_nbcbench_mode == NBCBENCH_OVERLAP) {
         printf("#   Procs: total number of processes\n");
         printf("#   Count: count of elements in send/recv buffer\n");
         printf("#   BlockingTime: time of NBC in blocking mode (Iop + Wait)\n");
@@ -605,7 +617,7 @@ int report_write_nbcbench_header(nbcbench_t *bench)
             printf("# [Procs] [Count]     [TRuns] [CRuns] [RSE]      [Init]         [Wait]         [Total]\n");
         }
     }
-    printf("# -------------------------------------------------------------------------------------\n");
+    //printf("# -------------------------------------------------------------------------------------\n");
     return MPIPERF_SUCCESS;
 }
 
@@ -797,6 +809,29 @@ int report_write_nbcbench_procstat_overlap(nbcbench_t *bench,
 }
 
 /*
+ * run_nbcbench_memtest: Simple mem usage test
+ *
+ */
+void run_nbcbench_memtest(nbcbench_t *bench, nbctest_params_t *params)
+{
+	nbctest_result_t *stage_results = NULL; //I just don't want to get segfault
+    stage_results = xrealloc(stage_results, sizeof(*stage_results));
+
+	if (bench->init)
+	        bench->init(params);
+
+	init_memory_hook();
+
+	bench->blockingop(params, &stage_results[0]);
+
+    deinit_memory_hook();
+
+    if (bench->free)
+            bench->free();
+    free(stage_results);
+}
+
+/*
  * run_nbcbench_blocking: Measures execution time of the NBC operation
  *                        in blocking mode.
  */
@@ -827,20 +862,26 @@ int run_nbcbench_blocking(nbcbench_t *bench, nbctest_params_t *params)
             exit_error("Can't allocate memory for statistic");
         }
 
-        run_nbcbench_blocking_test(bench, params, &nruns, &ncorrectruns,
-                                   inittimestat, waittimestat, totaltimestat,
-                                   inittimestat_local, waittimestat_local,
-                                   totaltimestat_local);
+        if(mpiperf_mem_meas) {
+        	run_nbcbench_memtest(bench, params);
+            report_mem_usage_results(params->nprocs);
+        }
+        else {
+            run_nbcbench_blocking_test(bench, params, &nruns, &ncorrectruns,
+                                       inittimestat, waittimestat, totaltimestat,
+                                       inittimestat_local, waittimestat_local,
+                                       totaltimestat_local);
 
-        report_write_nbcbench_blocking(bench, params, nruns, ncorrectruns,
-                                       inittimestat, waittimestat, totaltimestat);
+            report_write_nbcbench_blocking(bench, params, nruns, ncorrectruns,
+                                           inittimestat, waittimestat, totaltimestat);
 
-        if (mpiperf_perprocreport) {
-            report_write_nbcbench_procstat_blocking(bench, params,
-                                                    nruns, ncorrectruns,
-                                                    inittimestat_local,
-                                                    waittimestat_local,
-                                                    totaltimestat_local);
+            if (mpiperf_perprocreport) {
+                report_write_nbcbench_procstat_blocking(bench, params,
+                                                        nruns, ncorrectruns,
+                                                        inittimestat_local,
+                                                        waittimestat_local,
+                                                        totaltimestat_local);
+            }
         }
         stat_sample_free(inittimestat);
         stat_sample_free(waittimestat);

@@ -88,7 +88,7 @@ int run_collbench(collbench_t *bench)
  * run_collbench_memtest: Simple mem usage test
  *
  */
-int run_collbench_memtest(collbench_t *bench, colltest_params_t *params)
+void run_collbench_memtest(collbench_t *bench, colltest_params_t *params)
 {
 	double time; //I just don't want to get segfault
 
@@ -128,7 +128,7 @@ int run_collbench_test(collbench_t *bench, colltest_params_t *params)
         if(mpiperf_mem_meas)
         {
         	run_collbench_memtest(bench, params);
-            report_mem_usage_results(bench, params);
+            report_mem_usage_results(params->nprocs);
 
         } else if (mpiperf_synctype == SYNC_TIME) {
             run_collbench_test_synctime(bench, params, &exectime, &nruns,
@@ -379,54 +379,59 @@ collbench_t *lookup_collbench(const char *name)
 int report_write_collbench_header(collbench_t *bench)
 {
     if (IS_MASTER_RANK) {
-        printf("# Characteristics of measurements:\n");
-        printf("#   Procs - total number of processes\n");
-        printf("#   Count - count of elements in send/recv buffer\n");
-        printf("#   TRuns - total number of measurements (valid and invalid measurements)\n");
-        printf("#   CRuns - number of correct measurements (only valid)\n");
-        printf("#   FRuns - number of correct measurements after statistical analysis (removing of outliers)\n");
-        printf("#   Mean - arithmetic mean of execution time (based on FRuns)\n");
-        printf("#   RSE - relative standard error (StdErr / Mean)\n");
-        printf("#   StdErr - standard error of the mean: StdDev / sqrt(FRuns)\n");
-        printf("#   Min - minimal value\n");
-        printf("#   Max - miximal value\n");
-        printf("#   CL - confidence level: 90%%, 95%% or 99%%\n");
-        printf("#   Err - error of measurements: t_student * StdErr\n");
-        printf("#   CI LB - lower bound of confidence interval: Mean - Err\n");
-        printf("#   CI UB - upper bound of confidence interval: Mean + Err\n");
-        printf("#   RelErr - relative error of measurements: Err / Mean\n");
+    	if(mpiperf_mem_meas) {
+    		print_memtest_header(bench->name);
+    	}
+    	else {
+            printf("# Characteristics of measurements:\n");
+            printf("#   Procs - total number of processes\n");
+            printf("#   Count - count of elements in send/recv buffer\n");
+            printf("#   TRuns - total number of measurements (valid and invalid measurements)\n");
+            printf("#   CRuns - number of correct measurements (only valid)\n");
+            printf("#   FRuns - number of correct measurements after statistical analysis (removing of outliers)\n");
+            printf("#   Mean - arithmetic mean of execution time (based on FRuns)\n");
+            printf("#   RSE - relative standard error (StdErr / Mean)\n");
+            printf("#   StdErr - standard error of the mean: StdDev / sqrt(FRuns)\n");
+            printf("#   Min - minimal value\n");
+            printf("#   Max - miximal value\n");
+            printf("#   CL - confidence level: 90%%, 95%% or 99%%\n");
+            printf("#   Err - error of measurements: t_student * StdErr\n");
+            printf("#   CI LB - lower bound of confidence interval: Mean - Err\n");
+            printf("#   CI UB - upper bound of confidence interval: Mean + Err\n");
+            printf("#   RelErr - relative error of measurements: Err / Mean\n");
 
-        if (mpiperf_synctype == SYNC_TIME) {
-            printf("#\n");
-            printf("# Value of Mean are computed as\n");
-            printf("# mean_of_runs(max_of_all_procs(t[0][j], ..., t[Procs - 1][j])),\n");
-            printf("# where t[i][j] is a time of process i at measure j = 1, 2, ..., CRuns\n");
-            printf("#\n");
-            printf("# ------------------------------------------------------------------\n");
-            printf("# Benchmark: %s\n", bench->name);
-            printf("# Confidence level (CL): %d%%\n", mpiperf_confidence_level);
-            printf("# ------------------------------------------------------------------\n");
-            if (mpiperf_timescale == TIMESCALE_SEC) {
-                printf("# [Procs] [Count]     [TRuns] [CRuns] [FRuns] [Mean]       [RSE]      [StdErr]     [Min]        [Max]        [Err]        [CI LB]      [CI UB]      [RelErr]\n");
+            if (mpiperf_synctype == SYNC_TIME) {
+                printf("#\n");
+                printf("# Value of Mean are computed as\n");
+                printf("# mean_of_runs(max_of_all_procs(t[0][j], ..., t[Procs - 1][j])),\n");
+                printf("# where t[i][j] is a time of process i at measure j = 1, 2, ..., CRuns\n");
+                printf("#\n");
+                printf("# ------------------------------------------------------------------\n");
+                printf("# Benchmark: %s\n", bench->name);
+                printf("# Confidence level (CL): %d%%\n", mpiperf_confidence_level);
+                printf("# ------------------------------------------------------------------\n");
+                if (mpiperf_timescale == TIMESCALE_SEC) {
+                    printf("# [Procs] [Count]     [TRuns] [CRuns] [FRuns] [Mean]       [RSE]      [StdErr]     [Min]        [Max]        [Err]        [CI LB]      [CI UB]      [RelErr]\n");
+                } else {
+                    /* usec */
+                    printf("# [Procs] [Count]     [TRuns] [CRuns] [FRuns] [Mean]         [RSE]      [StdErr]       [Min]          [Max]          [Err]          [CI LB]        [CI UB]        [RelErr]\n");
+                }
+                printf("#\n");
             } else {
-                /* usec */
-                printf("# [Procs] [Count]     [TRuns] [CRuns] [FRuns] [Mean]         [RSE]      [StdErr]       [Min]          [Max]          [Err]          [CI LB]        [CI UB]        [RelErr]\n");
+                printf("#\n");
+                printf("# ------------------------------------------------------------------\n");
+                printf("# Benchmark: %s\n", bench->name);
+                printf("# Pipelined measurements\n");
+                printf("# ------------------------------------------------------------------\n");
+                if (mpiperf_timescale == TIMESCALE_SEC) {
+                    printf("# [Procs] [Count]     [TRuns] [Mean]\n");
+                } else {
+                    /* usec */
+                    printf("# [Procs] [Count]     [TRuns] [Mean]\n");
+                }
+                printf("#\n");
             }
-            printf("#\n");
-        } else {
-            printf("#\n");
-            printf("# ------------------------------------------------------------------\n");
-            printf("# Benchmark: %s\n", bench->name);
-            printf("# Pipelined measurements\n");
-            printf("# ------------------------------------------------------------------\n");
-            if (mpiperf_timescale == TIMESCALE_SEC) {
-                printf("# [Procs] [Count]     [TRuns] [Mean]\n");
-            } else {
-                /* usec */
-                printf("# [Procs] [Count]     [TRuns] [Mean]\n");
-            }
-            printf("#\n");
-        }
+    	}
     }
     return MPIPERF_SUCCESS;
 }

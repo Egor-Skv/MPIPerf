@@ -32,6 +32,8 @@ static void *(*old_realloc_hook) __MALLOC_PMT ((void *__ptr, size_t __size, __co
 static int malloc_call_cnt = 0;
 static int realloc_call_cnt = 0;
 static int free_call_cnt = 0;
+static int urealloc_call_cnt = 0;
+static int ufree_call_cnt = 0;
 
 // Mem counters
 static int bytes_allocated = 0;
@@ -90,22 +92,37 @@ void free_all_counters(void)
 	realloc_call_cnt = 0;
 	free_call_cnt = 0;
 
+	urealloc_call_cnt=0;
+	ufree_call_cnt=0;
+
 	bytes_allocated = 0;
 	bytes_freed = 0;
 }
 
-void report_mem_usage_results(collbench_t *bench, colltest_params_t *params)
+void print_memtest_header(char *benchname) {
+	printf("# Characteristics of measurements:\n");
+	printf("# Procs - total number of processes\n");
+	printf("# Malloc called - malloc called\n");
+	printf("# Realloc called - realloc called\n");
+	printf("# Free called - free called\n");
+	printf("# Unknown free - free called to unknown pointer\n");
+	printf("# Unknown realloc - realloc called to unknown pointer\n");
+	printf("# Free called - free called\n");
+	printf("# Allocated - Total bytes allocated\n");
+	printf("# Freed  - Total bytes freed\n");
+	printf("# Benchmark: %s\n", benchname);
+
+	printf("# [Procs]    [Malloc called]    [Realloc called]    [Free called]    [Unknown free]    [Unknown realloc]    [Allocated]    [Freed]\n");
+}
+
+void report_mem_usage_results(int nprocs)
 {
+
 	if (IS_MASTER_RANK) { //Maybe we need to print this data for each process??
 
-		printf("Memory usage results (the same for each process)\n");
-		printf("function:\t\t %s\ncomm size\t\t %d\n",bench->name, params->nprocs);
-		printf("Malloc called:\t\t %d times\n", malloc_call_cnt);
-		printf("Realloc called:\t\t %d times\n", realloc_call_cnt);
-		printf("Free called:\t\t %d times\n", free_call_cnt);
-
-		printf("Bytes allocated:\t %d\n", bytes_allocated);
-		printf("Bytes freed:\t\t %d\n\n", bytes_freed);
+		printf("   %-7d    %-7d            %-7d             %-7d          %-7d           %-7d              %-7d        %-7d\n",
+				nprocs, malloc_call_cnt, realloc_call_cnt, free_call_cnt,
+				ufree_call_cnt,	urealloc_call_cnt, bytes_allocated, bytes_freed);
 	}
 
 	free_all_counters();
@@ -125,11 +142,6 @@ static void *my_malloc_hook(size_t size, const void *caller)
     /* Save underlying hooks */
     save_underlying_hooks();
 
-
-    /* printf might call malloc, so protect it too. */
-    //if (IS_MASTER_RANK)
-    //printf ("malloc (%u) returns %p caller %p\n", (unsigned int) size, result, caller);
-
     /*Save data to the hash table*/
     memht_insert(test_ht, &result, &size);
 
@@ -144,6 +156,9 @@ static void *my_malloc_hook(size_t size, const void *caller)
 static void *my_realloc_hook(void *ptr, size_t size, const void *caller)
 {
     void *result;
+    void *hash_data = NULL;
+    int freed, alloc = size;
+
     /* Restore all old hooks */
     restore_hooks();
 
@@ -153,10 +168,28 @@ static void *my_realloc_hook(void *ptr, size_t size, const void *caller)
     /* Save underlying hooks */
     save_underlying_hooks();
 
-    /* printf might call malloc, so protect it too. */
-    printf ("realloc  pointer %p (%u) returns %p\n", ptr, (unsigned int) size, result);
+    hash_data = memht_search(test_ht, &ptr);
 
-    //TODO: store realloc in hash and recount allocated bytes
+    if(hash_data) {
+    	freed += *((int*)hash_data);
+    	memht_remove(test_ht, &ptr);
+
+        memht_insert(test_ht, &result, &size);
+
+        realloc_call_cnt++;
+        if((alloc-freed) > 0)
+        	bytes_allocated += alloc - freed;
+        else
+        	bytes_freed += freed - alloc;
+    }
+    else
+    {
+    	//Realloc called on unknown pointer
+    	urealloc_call_cnt++;
+    }
+
+
+
 
     /* Restore our own hooks */
     set_my_hooks();
@@ -165,6 +198,8 @@ static void *my_realloc_hook(void *ptr, size_t size, const void *caller)
 
 static void my_free_hook(void *ptr, const void *caller)
 {
+	void *hash_data = NULL;
+
     /* Restore all old hooks */
 	restore_hooks();
 
@@ -174,17 +209,18 @@ static void my_free_hook(void *ptr, const void *caller)
     /* Save underlying hooks */
     save_underlying_hooks();
 
-    void *hash_data = NULL;
-
     hash_data = memht_search(test_ht, &ptr);
 
     if(hash_data) {
     	bytes_freed += *((int*)hash_data);
+    	memht_remove(test_ht, &ptr);
+    	free_call_cnt++;
     }
-    else
-    	printf("Can't find data for key %d! \n", (int)ptr);
+    else {
+    	//Free called on unknown pointer
+    	ufree_call_cnt++;
+    }
 
-    free_call_cnt++;
 
     /* Restore our own hooks */
     set_my_hooks();

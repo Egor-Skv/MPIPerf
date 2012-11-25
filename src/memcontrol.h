@@ -12,6 +12,7 @@ void init_memory_hook (void);
 
 void deinit_memory_hook (void);
 
-void report_mem_usage_results(collbench_t *bench, colltest_params_t *params);
+void report_mem_usage_results(int nprocs);
+void print_memtest_header(char *benchname);
 
 #endif /* MEMCONTROL_H_ */
