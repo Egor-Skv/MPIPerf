@@ -130,7 +130,7 @@ int run_collbench_test(collbench_t *bench, colltest_params_t *params)
         if(mpiperf_mem_meas)
         {
         	run_collbench_memtest(bench, params);
-            report_mem_usage_results(params->nprocs);
+            report_mem_usage_results(params->nprocs, params->comm);
 
         } else if (mpiperf_synctype == SYNC_TIME) {
             run_collbench_test_synctime(bench, params, &exectime, &nruns,

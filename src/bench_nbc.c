@@ -864,7 +864,7 @@ int run_nbcbench_blocking(nbcbench_t *bench, nbctest_params_t *params)
 
         if(mpiperf_mem_meas) {
         	run_nbcbench_memtest(bench, params);
-            report_mem_usage_results(params->nprocs);
+            report_mem_usage_results(params->nprocs, params->comm);
         }
         else {
             run_nbcbench_blocking_test(bench, params, &nruns, &ncorrectruns,

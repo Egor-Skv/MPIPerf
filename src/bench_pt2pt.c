@@ -119,7 +119,7 @@ int run_pt2ptbench_test(pt2ptbench_t *bench, pt2pttest_params_t *params)
 
         if(mpiperf_mem_meas) {
         	run_pt2ptbench_memtest(bench, params);
-            report_mem_usage_results(params->nprocs);
+            report_mem_usage_results(params->nprocs, params->comm);
         }
         else {
             /* This process participates in measures */

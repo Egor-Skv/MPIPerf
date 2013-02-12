@@ -9,7 +9,6 @@
 #include "mpiperf.h"
 #include <pthread.h>
 #include "hashtab.h"
-#include "bench_coll.h"
 #include "memcontrol.h"
 
 //malloc_hook isn't thread safe :(
@@ -128,14 +127,37 @@ void print_memtest_header(char *benchname) {
 	printf("# [Procs]  [Rank]    [Malloc called]    [Realloc called]    [Free called]    [Unknown free]    [Unknown realloc]    [Allocated]    [Freed]\n");
 }
 
-void report_mem_usage_results(int nprocs)
+void report_mem_usage_results(int nprocs, MPI_Comm comm)
 {
+	int i, size = 0;
+	int line_len = 0;
 
-	if (!mpiperf_logmaster_only || IS_MASTER_RANK) {
+	MPI_Comm_size(comm, &size);
 
+	if (!mpiperf_logmaster_only) {
+		for(i = 0; i < size; i++) {
+			MPI_Barrier(comm);
+			if(i == mpiperf_rank) {
+				if(IS_MASTER_RANK)
+					line_len = printf("   %-7d  %-7d   %-7d            %-7d             %-7d          %-7d           %-7d              %-7d        %-7d\n",
+							nprocs, mpiperf_rank, memstat.malloc_call_cnt, memstat.realloc_call_cnt, memstat.free_call_cnt,
+							memstat.ufree_call_cnt,	memstat.urealloc_call_cnt, memstat.bytes_allocated, memstat.bytes_freed);
+				else
+					line_len = printf("   \t    %-7d   %-7d            %-7d             %-7d          %-7d           %-7d              %-7d        %-7d\n",
+							mpiperf_rank, memstat.malloc_call_cnt, memstat.realloc_call_cnt, memstat.free_call_cnt,
+							memstat.ufree_call_cnt,	memstat.urealloc_call_cnt, memstat.bytes_allocated, memstat.bytes_freed);
+				if( i == (size - 1)) {
+					while(2 + line_len--)
+						printf("-");
+					printf("\n");
+				}
+			}
+		}
+	}
+	else if (IS_MASTER_RANK) {
 		printf("   %-7d  %-7d   %-7d            %-7d             %-7d          %-7d           %-7d              %-7d        %-7d\n",
-				nprocs, mpiperf_rank, memstat.malloc_call_cnt, memstat.realloc_call_cnt, memstat.free_call_cnt,
-				memstat.ufree_call_cnt,	memstat.urealloc_call_cnt, memstat.bytes_allocated, memstat.bytes_freed);
+			nprocs, mpiperf_rank, memstat.malloc_call_cnt, memstat.realloc_call_cnt, memstat.free_call_cnt,
+			memstat.ufree_call_cnt,	memstat.urealloc_call_cnt, memstat.bytes_allocated, memstat.bytes_freed);
 	}
 
 	free_all_counters();
