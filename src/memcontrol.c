@@ -10,6 +10,7 @@
 #include <pthread.h>
 #include "hashtab.h"
 #include "bench_coll.h"
+#include "memcontrol.h"
 
 //malloc_hook isn't thread safe :(
 pthread_mutex_t mpi_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -28,16 +29,22 @@ static void *(*old_realloc_hook) __MALLOC_PMT ((void *__ptr, size_t __size, __co
 //void (*__malloc_initialize_hook) (void) = init_memory_hook;
 
 
-// Call counters
-static int malloc_call_cnt = 0;
-static int realloc_call_cnt = 0;
-static int free_call_cnt = 0;
-static int urealloc_call_cnt = 0;
-static int ufree_call_cnt = 0;
+struct memstat_st {
 
-// Mem counters
-static int bytes_allocated = 0;
-static int bytes_freed = 0;
+	// Call counters
+	int malloc_call_cnt;
+	int realloc_call_cnt;
+	int free_call_cnt;
+	int urealloc_call_cnt;
+	int ufree_call_cnt;
+
+	// Mem counters
+	int bytes_allocated;
+	int bytes_freed;
+};
+
+
+static memstat_t memstat;
 
 //hash table
 hashtab_t *test_ht = NULL;
@@ -88,15 +95,20 @@ void deinit_memory_hook(void)
 
 void free_all_counters(void)
 {
-	malloc_call_cnt = 0;
-	realloc_call_cnt = 0;
-	free_call_cnt = 0;
+	memstat.malloc_call_cnt = 0;
+	memstat.realloc_call_cnt = 0;
+	memstat.free_call_cnt = 0;
 
-	urealloc_call_cnt=0;
-	ufree_call_cnt=0;
+	memstat.urealloc_call_cnt=0;
+	memstat.ufree_call_cnt=0;
 
-	bytes_allocated = 0;
-	bytes_freed = 0;
+	memstat.bytes_allocated = 0;
+	memstat.bytes_freed = 0;
+}
+
+void init_memtest_stat(void)
+{
+	free_all_counters();
 }
 
 void print_memtest_header(char *benchname) {
@@ -122,8 +134,8 @@ void report_mem_usage_results(int nprocs)
 	if (!mpiperf_logmaster_only || IS_MASTER_RANK) {
 
 		printf("   %-7d  %-7d   %-7d            %-7d             %-7d          %-7d           %-7d              %-7d        %-7d\n",
-				nprocs, mpiperf_rank, malloc_call_cnt, realloc_call_cnt, free_call_cnt,
-				ufree_call_cnt,	urealloc_call_cnt, bytes_allocated, bytes_freed);
+				nprocs, mpiperf_rank, memstat.malloc_call_cnt, memstat.realloc_call_cnt, memstat.free_call_cnt,
+				memstat.ufree_call_cnt,	memstat.urealloc_call_cnt, memstat.bytes_allocated, memstat.bytes_freed);
 	}
 
 	free_all_counters();
@@ -147,8 +159,8 @@ static void *my_malloc_hook(size_t size, const void *caller)
     /*Save data to the hash table*/
     memht_insert(test_ht, &result, &size);
 
-    malloc_call_cnt++;
-    bytes_allocated += size;
+    memstat.malloc_call_cnt++;
+    memstat.bytes_allocated += size;
 
     /* Restore our own hooks */
     set_my_hooks();
@@ -177,17 +189,17 @@ static void *my_realloc_hook(void *ptr, size_t size, const void *caller)
     	memht_remove(test_ht, &ptr);
         memht_insert(test_ht, &result, &size);
 
-        realloc_call_cnt++;
+        memstat.realloc_call_cnt++;
         if((alloc-freed) > 0){
-        	bytes_allocated += alloc - freed;
+        	memstat.bytes_allocated += alloc - freed;
         }
         else
-        	bytes_freed += freed - alloc;
+        	memstat.bytes_freed += freed - alloc;
     }
     else
     {
     	//Realloc called on unknown pointer
-    	urealloc_call_cnt++;
+    	memstat.urealloc_call_cnt++;
     }
 
     /* Restore our own hooks */
@@ -211,13 +223,13 @@ static void my_free_hook(void *ptr, const void *caller)
     hash_data = memht_search(test_ht, &ptr);
 
     if(hash_data) {
-    	bytes_freed += *((int*)hash_data);
+    	memstat.bytes_freed += *((int*)hash_data);
     	memht_remove(test_ht, &ptr);
-    	free_call_cnt++;
+    	memstat.free_call_cnt++;
     }
     else {
     	//Free called on unknown pointer
-    	ufree_call_cnt++;
+    	memstat.ufree_call_cnt++;
     }
 
 

@@ -95,6 +95,8 @@ void run_collbench_memtest(collbench_t *bench, colltest_params_t *params)
 	if (bench->init)
 	        bench->init(params);
 
+	init_memtest_stat();
+
 	init_memory_hook();
 
 	bench->collop(params, &time);
