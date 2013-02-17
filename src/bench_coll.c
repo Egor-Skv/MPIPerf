@@ -46,7 +46,7 @@ int run_collbench(collbench_t *bench)
         params.comm = createcomm(MPI_COMM_WORLD, params.nprocs);
 
         if (mpiperf_mem_meas) {
-        	params.count = mpiperf_count_min;
+        	params.count = mpiperf_count_mem;
         	run_collbench_test(bench, &params);
         }
         else {

@@ -79,6 +79,7 @@ extern int mpiperf_nprocs_step;
 
 extern int mpiperf_count_min;
 extern int mpiperf_count_max;
+extern int mpiperf_count_mem;
 extern int mpiperf_count_step_type;
 extern int mpiperf_count_step;
 

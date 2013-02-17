@@ -46,6 +46,7 @@ int mpiperf_nprocs_step;
 
 int mpiperf_count_min;
 int mpiperf_count_max;
+int mpiperf_count_mem;
 int mpiperf_count_step_type;
 int mpiperf_count_step;
 
@@ -241,7 +242,7 @@ static void print_usage(int argc, char **argv)
     fprintf(stderr, "  -j               Run sanity check of timer\n");
     fprintf(stderr, "  -l <file>        Log filename\n");
     fprintf(stderr, "  -m               Log by master process only (default: off)\n");
-    fprintf(stderr, "  -M               Measure memory usage (Extra new feature!!!)\n");
+    fprintf(stderr, "  -M <value>       Measure memory usage for <value> size message (NEW!!!)\n");
     fprintf(stderr, "  -q               Display information about all benchmarks\n");
     fprintf(stderr, "  -h               Display this information\n");
     fprintf(stderr, "  -v               Display the version number\n");
@@ -253,7 +254,7 @@ static int parse_options(int argc, char **argv)
 {
     int opt;
 
-    while ( (opt = getopt(argc, argv, "p:P:x:X:g:G:s:S:e:E:r:R:l:z:w:t:o:c:badTjmqhM")) != -1) {
+    while ( (opt = getopt(argc, argv, "p:P:x:X:g:G:s:S:e:E:r:R:l:z:w:t:o:c:badTjmqhM:")) != -1) {
         switch (opt) {
         case 'p':
             mpiperf_nprocs_min = atoi(optarg);
@@ -368,6 +369,7 @@ static int parse_options(int argc, char **argv)
             break;
         case 'M':
             mpiperf_mem_meas = 1;
+            mpiperf_count_mem = parse_intval(optarg);
             break;
         case 'q':
             if (IS_MASTER_RANK) {

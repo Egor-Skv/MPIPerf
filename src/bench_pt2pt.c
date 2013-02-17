@@ -50,17 +50,22 @@ int run_pt2ptbench(pt2ptbench_t *bench)
 
     params.nprocs = 2;
     params.comm = createcomm(MPI_COMM_WORLD, params.nprocs);
+    if (mpiperf_mem_meas) {
+    	params.count = mpiperf_count_mem;
+    	run_pt2ptbench_test(bench, &params);
+    }
+    else {
+        /* For each data size (count) */
+        for (params.count = mpiperf_count_min;
+             params.count <= mpiperf_count_max; )
+        {
+            run_pt2ptbench_test(bench, &params);
 
-    /* For each data size (count) */
-    for (params.count = mpiperf_count_min;
-         params.count <= mpiperf_count_max; )
-    {
-        run_pt2ptbench_test(bench, &params);
-
-        if (mpiperf_count_step_type == STEP_TYPE_MUL) {
-            params.count *= mpiperf_count_step;
-        } else {
-            params.count += mpiperf_count_step;
+            if (mpiperf_count_step_type == STEP_TYPE_MUL) {
+                params.count *= mpiperf_count_step;
+            } else {
+                params.count += mpiperf_count_step;
+            }
         }
     }
 

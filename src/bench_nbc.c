@@ -65,7 +65,7 @@ int run_nbcbench(nbcbench_t *bench)
 
         if (mpiperf_mem_meas) {
         	/* For each data size (count) */
-        	params.count = mpiperf_count_min;
+        	params.count = mpiperf_count_mem;
         	run_nbcbench_blocking(bench, &params);
         }
         else {
