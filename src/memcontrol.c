@@ -92,22 +92,22 @@ void deinit_memory_hook(void)
 	ht_destroy(test_ht);
 }
 
-void free_all_counters(void)
+void free_all_counters(memstat_t *mstat)
 {
-	memstat.malloc_call_cnt = 0;
-	memstat.realloc_call_cnt = 0;
-	memstat.free_call_cnt = 0;
+	mstat->malloc_call_cnt = 0;
+	mstat->realloc_call_cnt = 0;
+	mstat->free_call_cnt = 0;
 
-	memstat.urealloc_call_cnt=0;
-	memstat.ufree_call_cnt=0;
+	mstat->urealloc_call_cnt=0;
+	mstat->ufree_call_cnt=0;
 
-	memstat.bytes_allocated = 0;
-	memstat.bytes_freed = 0;
+	mstat->bytes_allocated = 0;
+	mstat->bytes_freed = 0;
 }
 
 void init_memtest_stat(void)
 {
-	free_all_counters();
+	free_all_counters(&memstat);
 }
 
 void print_memtest_header(char *benchname) {
@@ -124,28 +124,44 @@ void print_memtest_header(char *benchname) {
 	printf("# Freed  - Total bytes freed\n");
 	printf("# Benchmark: %s\n", benchname);
 
-	printf("# [Procs]  [Rank]    [Malloc called]    [Realloc called]    [Free called]    [Unknown free]    [Unknown realloc]    [Allocated]    [Freed]\n");
+	printf("# [Procs]    [Malloc called]    [Realloc called]    [Free called]    [Unknown free]    [Unknown realloc]    [Allocated]    [Freed]\n");
 }
 
 void report_mem_usage_results(int nprocs, MPI_Comm comm)
 {
 	int i, size = 0;
 	int line_len = 0;
+	memstat_t memstat_total;
+
+	free_all_counters(&memstat_total);
+    MPI_Reduce(&memstat.bytes_allocated, &memstat_total.bytes_allocated, 1, MPI_INT, MPI_SUM, 0,  comm);
+    MPI_Reduce(&memstat.bytes_freed, &memstat_total.bytes_freed, 1, MPI_INT, MPI_SUM, 0,  comm);
+    MPI_Reduce(&memstat.free_call_cnt, &memstat_total.free_call_cnt, 1, MPI_INT, MPI_SUM, 0,  comm);
+    MPI_Reduce(&memstat.malloc_call_cnt, &memstat_total.malloc_call_cnt, 1, MPI_INT, MPI_SUM, 0,  comm);
+    MPI_Reduce(&memstat.realloc_call_cnt, &memstat_total.realloc_call_cnt, 1, MPI_INT, MPI_SUM, 0,  comm);
+    MPI_Reduce(&memstat.ufree_call_cnt, &memstat_total.ufree_call_cnt, 1, MPI_INT, MPI_SUM, 0,  comm);
+    MPI_Reduce(&memstat.urealloc_call_cnt, &memstat_total.urealloc_call_cnt, 1, MPI_INT, MPI_SUM, 0,  comm);
 
 	MPI_Comm_size(comm, &size);
 
+	if (IS_MASTER_RANK) {
+		printf("   %-7d    %-7d            %-7d             %-7d          %-7d           %-7d              %-7d        %-7d\n",
+				nprocs, memstat_total.malloc_call_cnt / nprocs, memstat_total.realloc_call_cnt / nprocs,
+				memstat_total.free_call_cnt / nprocs, memstat_total.ufree_call_cnt / nprocs,
+				memstat_total.urealloc_call_cnt / nprocs, memstat_total.bytes_allocated / nprocs,
+				memstat_total.bytes_freed / nprocs);
+	}
+
 	if (!mpiperf_logmaster_only) {
+		if (IS_MASTER_RANK)
+			printf(" Detailed:\n");
+
 		for(i = 0; i < size; i++) {
 			MPI_Barrier(comm);
 			if(i == mpiperf_rank) {
-				if(IS_MASTER_RANK)
-					line_len = printf("   %-7d  %-7d   %-7d            %-7d             %-7d          %-7d           %-7d              %-7d        %-7d\n",
-							nprocs, mpiperf_rank, memstat.malloc_call_cnt, memstat.realloc_call_cnt, memstat.free_call_cnt,
-							memstat.ufree_call_cnt,	memstat.urealloc_call_cnt, memstat.bytes_allocated, memstat.bytes_freed);
-				else
-					line_len = printf("   \t    %-7d   %-7d            %-7d             %-7d          %-7d           %-7d              %-7d        %-7d\n",
-							mpiperf_rank, memstat.malloc_call_cnt, memstat.realloc_call_cnt, memstat.free_call_cnt,
-							memstat.ufree_call_cnt,	memstat.urealloc_call_cnt, memstat.bytes_allocated, memstat.bytes_freed);
+				line_len = printf("   %-7d    %-7d            %-7d             %-7d          %-7d           %-7d              %-7d        %-7d\n",
+						mpiperf_rank, memstat.malloc_call_cnt, memstat.realloc_call_cnt, memstat.free_call_cnt,
+						memstat.ufree_call_cnt,	memstat.urealloc_call_cnt, memstat.bytes_allocated, memstat.bytes_freed);
 				if( i == (size - 1)) {
 					while(2 + line_len--)
 						printf("-");
@@ -154,14 +170,8 @@ void report_mem_usage_results(int nprocs, MPI_Comm comm)
 			}
 		}
 	}
-	else if (IS_MASTER_RANK) {
-		printf("   %-7d  %-7d   %-7d            %-7d             %-7d          %-7d           %-7d              %-7d        %-7d\n",
-			nprocs, mpiperf_rank, memstat.malloc_call_cnt, memstat.realloc_call_cnt, memstat.free_call_cnt,
-			memstat.ufree_call_cnt,	memstat.urealloc_call_cnt, memstat.bytes_allocated, memstat.bytes_freed);
-	}
 
-	free_all_counters();
-
+	free_all_counters(&memstat);
 }
 
 

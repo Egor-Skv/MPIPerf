@@ -34,7 +34,7 @@ int run_collbench(collbench_t *bench)
     benchtime = hpctimer_wtime();
     timeslot_initialize();
 
-    report_write_header();
+   // report_write_header();
     report_write_collbench_header(bench);
     if (mpiperf_perprocreport)
         report_write_collbench_procstat_header(bench);
